@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: juice-deployment
+  name: juice-svc-6
+  namespace: prod
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 3000
+    nodePort: 30055
+  selector:
+    name: juice-pod-6
+  type: NodePort

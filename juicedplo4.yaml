@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: juice-deploy-4
+    labels:
+        name: juice-deployment-4
+    namespace: prod
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            name: juice-pod-4
+    template:
+        metadata:
+            name: juice-pod-4
+            labels:
+                name: juice-pod-4
+        spec:
+            containers:
+             - name: juice
+               image: bkimminich/juice-shop
+               env:
+               - name: NODE_ENV
+                 value: unsafe
+               ports:
+                - containerPort: 3000

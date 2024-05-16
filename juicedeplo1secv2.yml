@@ -1,0 +1,243 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: juice-deploy-1
+    labels:
+     app.kubernetes.io/instance: WAAS
+     app.kubernetes.io/managed-by: Helm
+     app.kubernetes.io/name: WAAS     
+     name: juice-deployment-1
+    namespace: prod
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            name: juice-pod-1
+    template:
+        metadata:
+            name: juice-pod-1
+            labels:
+                name: juice-pod-1
+        spec:
+            containers:
+             - name: juice
+               image: bkimminich/juice-shop
+               env:
+               - name: NODE_ENV
+                 value: unsafe
+               ports:
+                - containerPort: 3000
+             - command:
+                - /wrapper.sh
+                - --health-check-port=9919
+                - -m=waas-controller
+                - -P=12121
+                - -n=k8swaf.svc
+                - -s=waas-rate-limiter
+                - -O=8081
+                - -a=k8swaf.svc
+                - -p=prod/juice-profile
+                - -t=juice
+                - -e
+                - "--statsd-port=8125"
+                - "-c=0.0.0.0:9000:Juice-Policy:127.0.0.1:3000"
+                - --controller-tls=true
+                - --controller-tls-client-auth=true
+                - --controller-tls-client-crt-file=/etc/tls/tls.crt
+                - --controller-tls-client-key-file=/etc/tls/tls.key
+                - --controller-tls-ca-file=/etc/tls/ca/ca.crt
+                - --rl-tls=true
+                - --rl-tls-client-auth=true
+                - --rl-tls-client-crt-file=/etc/rate-limiter/tls/tls.crt
+                - --rl-tls-client-key-file=/etc/rate-limiter/tls/tls.key
+                - --rl-tls-ca-file=/etc/rate-limiter/ca/ca.crt
+               env:
+               - name: ENFORCER_OPT_L
+                 value: info
+               - name: ENFORCER_OPT_BASE_ID
+                 value: "321"
+               image: repo:5000/waas-bootstrap1.14.0
+               imagePullPolicy: Always
+               name: enforcer
+               ports:
+                - containerPort: 19010
+                  name: stats
+                  protocol: TCP
+               resources: {}
+               securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - all
+                  readOnlyRootFilesystem: true
+                  runAsGroup: 65534
+                  runAsUser: 65534
+               terminationMessagePath: /dev/termination-log
+               terminationMessagePolicy: File
+               volumeMounts:
+                - mountPath: /logs
+                  name: logs-volume
+                - mountPath: /etc/waas-config
+                  name: waas-config-volume
+                - mountPath: /etc/tls
+                  name: controller-client-volume
+                - mountPath: /etc/tls/ca
+                  name: controller-ca-volume
+                - mountPath: /etc/rate-limiter/tls
+                  name: rate-limiter-client-volume
+                - mountPath: /etc/rate-limiter/ca
+                  name: rate-limiter-ca-volume
+                - mountPath: /opt/waas_aw_db
+                  name: enrich-volume
+               readinessProbe:
+                 failureThreshold: 3
+                 httpGet:
+                  path: /
+                  port: 9919
+                  scheme: HTTP
+                 periodSeconds: 10
+                 successThreshold: 1
+                 timeoutSeconds: 5
+               livenessProbe:
+                 failureThreshold: 3
+                 httpGet:
+                  path: /
+                  port: 9919
+                  scheme: HTTP
+                 periodSeconds: 10
+                 successThreshold: 1
+                 timeoutSeconds: 5
+             - env:
+               - name: ROTATE_PORT
+                 value: "19000"
+               - name: ROTATE_SIZE
+                 value: 100M
+               - name: ROTATE_NUM
+                 value: "3"
+               - name: ROTATE_EVERY
+                 value: "60"
+               image: repo:5000/waas-logrotate1.14.0
+               imagePullPolicy: Always
+               name: logrotate
+               resources: {}
+               securityContext:
+                 allowPrivilegeEscalation: false
+                 capabilities:
+                   drop:
+                   - all
+                 readOnlyRootFilesystem: true
+                 runAsGroup: 65534
+                 runAsUser: 65534
+               terminationMessagePath: /dev/termination-log
+               terminationMessagePolicy: File
+               volumeMounts:
+               - mountPath: /logs
+                 name: logs-volume
+             - env:
+               - name: FB_LS_HOST
+                 value: waas-logstash.k8swaf.svc
+               - name: FB_PREFIX
+                 value: juice-deploy-1.prod
+               - name: FB_LOG_LEVEL
+                 value: info
+               - name: FB_FLUSH
+                 value: "1"
+               - name: FB_HTTP_PORT
+                 value: "2025"
+               - name: FB_LOGS_PATH
+                 value: /logs
+               - name: FB_LS_PORT
+                 value: "2020"
+               - name: FB_MEM_BUF_LIMIT
+                 value: 100m
+               - name: FB_HTTP_LISTEN
+                 value: 0.0.0.0
+               - name: FB_STATSD_PORT
+                 value: "8125"
+               - name: FB_STATSD_LISTEN
+                 value: 127.0.0.1
+               - name: FB_TLS
+                 value: "On"
+               - name: FB_TLS_MTLS
+                 value: "On"
+               - name: FB_TLS_VERIFY
+                 value: "On"
+               - name: FB_TLS_CA_FILE
+                 value: /etc/securebeat/ca/ca.crt
+               - name: FB_TLS_CRT_FILE
+                 value: /etc/securebeat/client/tls.crt
+               - name: FB_TLS_KEY_FILE
+                 value: /etc/securebeat/client/tls.key
+               image: repo:5000/waas-fluentbit1.14.0
+               imagePullPolicy: Always
+               name: fluentbit
+               resources: {}
+               securityContext:
+                 allowPrivilegeEscalation: false
+                 capabilities:
+                   drop:
+                   - all
+                 readOnlyRootFilesystem: true
+                 runAsGroup: 65534
+                 runAsUser: 65534
+               terminationMessagePath: /dev/termination-log
+               terminationMessagePolicy: File
+               volumeMounts:
+               - mountPath: /etc/securebeat/client
+                 name: securebeat-client-volume-juiceshop
+               - mountPath: /etc/securebeat/ca
+                 name: waas-ca-volume-juiceshop
+               - mountPath: /logs
+                 name: logs-volume
+            initContainers:
+            - args:
+              - kopy
+              - /src/enforcer/waas_aw_db
+              - /enrich
+              image: repo:5000/waas-enrich1.14.0
+              imagePullPolicy: Always
+              name: init-enrich
+              resources: {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                readOnlyRootFilesystem: true
+                runAsGroup: 65534
+                runAsUser: 65534
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: File
+              volumeMounts:
+              - mountPath: /enrich
+                name: enrich-volume            
+            volumes:
+              - name: waas-ca-volume-juiceshop
+                configMap:
+                  name: waas-ca-config
+              - name: rate-limiter-ca-volume
+                configMap:
+                  defaultMode: 420
+                  name: waas-ca-config
+              - name: controller-ca-volume
+                configMap:
+                  defaultMode: 420
+                  name: waas-ca-config
+              - name: securebeat-client-volume-juiceshop
+                secret:
+                   secretName: waas-securebeat-client-secret
+              - name: controller-client-volume
+                secret:
+                   defaultMode: 420
+                   secretName: waas-securebeat-client-secret
+              - name: rate-limiter-client-volume
+                secret:
+                   defaultMode: 420
+                   secretName: waas-securebeat-client-secret
+              - name: logs-volume
+                emptyDir: {}
+              - name: waas-config-volume
+                emptyDir: {}
+              - name: enrich-volume
+                emptyDir: {}
+            

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: juice-deployment
+  name: juice-svc-1
+  namespace: prod
+spec:
+  ports:
+    - name: http
+      targetPort: 9000
+      port: 3000
+      nodePort: 30050
+    - name: stats
+      nodePort: 31070
+      port: 8080
+      protocol: TCP
+      targetPort: 19010
+    - name: fb-stats
+      nodePort: 31071
+      port: 2020
+      protocol: TCP
+      targetPort: 2020
+
+  selector:
+    name: juice-pod-1
+  type: NodePort
